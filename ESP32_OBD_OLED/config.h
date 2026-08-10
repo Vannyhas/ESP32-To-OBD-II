@@ -72,7 +72,7 @@ enum BleUuidPreset {
 
 // ========================= WIFI OTA (GitHub pull) =========================
 // Long-press Overview → connect to phone hotspot → check GitHub for newer bin.
-#define FIRMWARE_VERSION   "1.2.1"
+#define FIRMWARE_VERSION   "1.2.2"
 #define OTA_WIFI_SSID      "13T"
 #define OTA_WIFI_PASS      "12121212"
 #define OTA_WIFI_TIMEOUT_MS 45000

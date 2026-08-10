@@ -53,8 +53,9 @@ Write-Host "OK: $dest"
 Write-Host "Updated firmware\manifest.json -> $manifestJson"
 Write-Host "Next: git add firmware; git commit; git push"
 
-# Best-effort purge if anyone still hits jsDelivr mirrors
+# Best-effort: recreate manifest path to reduce sticky raw.githubusercontent CDN
 try {
+  # already written; purge jsDelivr mirrors if any clients still use them
   Invoke-WebRequest "https://purge.jsdelivr.net/gh/Vannyhas/ESP32-To-OBD-II@main/firmware/manifest.json" -UseBasicParsing | Out-Null
   Invoke-WebRequest "https://purge.jsdelivr.net/gh/Vannyhas/ESP32-To-OBD-II@main/firmware/bin/$destName" -UseBasicParsing | Out-Null
   Write-Host "jsDelivr purge requested"

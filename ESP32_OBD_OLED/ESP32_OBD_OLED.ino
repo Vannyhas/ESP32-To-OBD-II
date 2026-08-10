@@ -38,6 +38,10 @@ unsigned long btnChangeMs = 0;
 unsigned long btnPressStartMs = 0;
 bool btnLongHandled = false;
 
+// Queued while blocked in slow ELM BLE waits (ISO 9141).
+bool pendingNextPage = false;
+bool pendingLongPress = false;
+
 uint8_t rapidTaps = 0;
 unsigned long rapidTapStartMs = 0;
 
@@ -214,8 +218,7 @@ void onOtaPullStatus(OtaPull::Status st, const char* detail, int progressPct) {
 
 void enterOtaMode() {
   trip.save();
-  bleObd.disconnect();
-  NimBLEDevice::deinit(true);
+  bleObd.end();
   delay(500);  // let BT stack release radio before Wi‑Fi
 
   uiState = UI_OTA;
@@ -263,8 +266,42 @@ void updateMockTelemetry() {
   telemetry.valid = true;
 }
 
+void handleLongPressActions() {
+  rapidTaps = 0;
+  if (uiState == UI_MOCK && page == PAGE_RPM) {
+    exitMockMode();
+    return;
+  }
+  if (uiState == UI_LIVE || uiState == UI_MOCK) {
+    if (page == PAGE_TRIP) {
+      resetTripWithFeedback();
+    } else if (page == PAGE_OVERVIEW) {
+      enterOtaMode();
+    } else if (page == PAGE_BAT) {
+      setDisplayPower(false);
+    }
+  }
+}
+
+// Called from BleElmClient while waiting for ELM response — keeps BOOT snappy.
+void elmUiYield() {
+  bool pe = false, re = false, lp = false;
+  pollButton(pe, re, lp);
+  if (pe) {
+    handleRapidTapForMock();
+  }
+  if (lp) {
+    pendingLongPress = true;
+  }
+  if (re && !btnLongHandled && (millis() - btnPressStartMs) < BTN_LONG_MS) {
+    if (uiState == UI_LIVE || uiState == UI_MOCK) {
+      pendingNextPage = true;
+    }
+  }
+}
+
 void enterMockMode() {
-  bleObd.disconnect();
+  bleObd.end();  // full radio off — no heat in mock
   uiState = UI_MOCK;
   goToBatScreen();
   updateMockTelemetry();
@@ -272,16 +309,17 @@ void enterMockMode() {
   showStatus("MOCK MODE", "hold RPM = exit");
   delay(400);
   invalidateUi(true);
-  Serial.println("[UI] Mock mode ON");
+  Serial.println("[UI] Mock mode ON (BLE off)");
 }
 
 void exitMockMode() {
   uiState = UI_ERROR;
   statusMsg = "Left mock";
-  showStatus("Mock OFF", "Reconnecting OBD...");
+  showStatus("Mock OFF", "Starting BLE...");
   Serial.println("[UI] Mock mode OFF");
   lastReconnectMs = 0;
   trip.save();
+  bleObd.begin("ESP32-OBD-LCD");
 }
 
 void showStatus(const char* title, const char* line2) {
@@ -689,8 +727,9 @@ void setup() {
   }
   gfx->fillScreen(RGB565_BLACK);
 
-  bleObd.begin("ESP32-OBD-LCD");
+  BleElmClient::setYieldCallback(elmUiYield);
 
+  // Delay BLE init until we know mock isn't requested (mock = radio off).
   showStatus("BOOT x5 = MOCK", "hold Overview=OTA");
   const unsigned long waitStart = millis();
   while (millis() - waitStart < MOCK_BOOT_WAIT_MS) {
@@ -701,6 +740,7 @@ void setup() {
   }
 
   if (uiState != UI_MOCK) {
+    bleObd.begin("ESP32-OBD-LCD");
     connectAndInit();
   }
 }
@@ -754,23 +794,20 @@ void loop() {
     return;
   }
 
-  if (longPress) {
-    rapidTaps = 0;
-    if (uiState == UI_MOCK && page == PAGE_RPM) {
-      exitMockMode();
-      return;
-    }
+  if (pendingLongPress) {
+    pendingLongPress = false;
+    handleLongPressActions();
+  }
+
+  if (pendingNextPage) {
+    pendingNextPage = false;
     if (uiState == UI_LIVE || uiState == UI_MOCK) {
-      if (page == PAGE_TRIP) {
-        resetTripWithFeedback();
-      } else if (page == PAGE_OVERVIEW) {
-        enterOtaMode();
-        return;  // don't fall through into BLE reconnect
-      } else if (page == PAGE_BAT) {
-        setDisplayPower(false);
-        return;
-      }
+      nextPage();
     }
+  }
+
+  if (longPress) {
+    handleLongPressActions();
   }
 
   if (pressedEdge) {
@@ -805,6 +842,9 @@ void loop() {
     if (millis() - lastReconnectMs > 5000) {
       lastReconnectMs = millis();
       showStatus("Reconnecting...", "BOOT x5 = MOCK");
+      if (!bleObd.isStarted()) {
+        bleObd.begin("ESP32-OBD-LCD");
+      }
       bleObd.disconnect();
       connectAndInit();
     }
@@ -812,8 +852,11 @@ void loop() {
     return;
   } else if (millis() - lastPidMs >= PID_INTERVAL_MS) {
     lastPidMs = millis();
-    if (elm.pollForPage(telemetry, page)) {
-      valuesDirty = true;
+    // Prefer queued page flips over starting another blocking PID.
+    if (!pendingNextPage && !pendingLongPress) {
+      if (elm.pollForPage(telemetry, page)) {
+        valuesDirty = true;
+      }
     }
   }
 

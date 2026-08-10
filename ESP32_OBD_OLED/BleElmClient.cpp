@@ -1,6 +1,7 @@
 #include "BleElmClient.h"
 
 BleElmClient bleObd;
+BleElmClient::YieldFn BleElmClient::yieldFn_ = nullptr;
 
 namespace {
 
@@ -50,6 +51,9 @@ bool targetMatches(const NimBLEAdvertisedDevice* adv, const String& target) {
 }  // namespace
 
 bool BleElmClient::begin(const char* localName) {
+  if (started_) {
+    disconnect();
+  }
   NimBLEDevice::init(localName);
   NimBLEDevice::setPower(9);  // dBm, NimBLE 2.x
 
@@ -59,8 +63,18 @@ bool BleElmClient::begin(const char* localName) {
   NimBLEDevice::setSecurityIOCap(BLE_HS_IO_KEYBOARD_DISPLAY);
   NimBLEDevice::setSecurityPasskey(OBD_BLE_PIN);
   NimBLEDevice::deleteAllBonds();
+  started_ = true;
   Serial.printf("[BLE] Ready, PIN=%u\n", (unsigned)OBD_BLE_PIN);
   return true;
+}
+
+void BleElmClient::end() {
+  disconnect();
+  if (started_) {
+    NimBLEDevice::deinit(true);
+    started_ = false;
+    Serial.println("[BLE] Stopped (radio off)");
+  }
 }
 
 bool BleElmClient::connectToObd(const String& target) {
@@ -281,7 +295,8 @@ String BleElmClient::readStringUntil(char terminator) {
       if (c == terminator) return out;
       if (c != '\0') out += c;
     }
-    delay(5);
+    if (yieldFn_) yieldFn_();  // keep button responsive during slow ISO waits
+    delay(2);
   }
   return out;
 }

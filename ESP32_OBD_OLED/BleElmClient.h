@@ -8,6 +8,8 @@
 class BleElmClient : public NimBLEClientCallbacks {
  public:
   bool begin(const char* localName = "ESP32-OBD");
+  void end();  // disconnect + NimBLE deinit (cool down radio)
+  bool isStarted() const { return started_; }
   bool connectToObd(const String& target = OBD_TARGET_NAME);
   void disconnect();
   bool isConnected() const;
@@ -20,6 +22,10 @@ class BleElmClient : public NimBLEClientCallbacks {
   int read();
   String readStringUntil(char terminator);
   void flushInput();
+
+  // Called while waiting for ELM '>' so UI can service the button.
+  using YieldFn = void (*)();
+  static void setYieldCallback(YieldFn fn) { yieldFn_ = fn; }
 
   // NimBLEClientCallbacks
   void onDisconnect(NimBLEClient* client, int reason) override;
@@ -37,7 +43,10 @@ class BleElmClient : public NimBLEClientCallbacks {
 
   String rxBuf_;
   volatile bool connected_ = false;
+  bool started_ = false;
   int activePreset_ = -1;
+
+  static YieldFn yieldFn_;
 };
 
 extern BleElmClient bleObd;
