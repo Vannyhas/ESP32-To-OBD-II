@@ -41,23 +41,101 @@ bool extractJsonString(const String& json, const char* key, String& out) {
   return out.length() > 0;
 }
 
+bool ssidEquals(const String& a, const char* b) {
+  if (!b) return false;
+  String aa = a;
+  aa.trim();
+  String bb(b);
+  bb.trim();
+  return aa.equalsIgnoreCase(bb);
+}
+
 bool connectWifi(StatusFn onStatus) {
   report(onStatus, Status::ConnectingWifi, OTA_WIFI_SSID);
-  WiFi.mode(WIFI_STA);
+
+  // After NimBLE, radio needs a clean handoff to Wi‑Fi STA.
+  WiFi.persistent(false);
   WiFi.disconnect(true, true);
-  delay(100);
+  WiFi.mode(WIFI_OFF);
+  delay(800);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+#if defined(WIFI_AUTH_WPA_PSK)
+  // Prefer widest compatibility with phone hotspots (WPA2 / mixed).
+  WiFi.setMinSecurity(WIFI_AUTH_WPA_PSK);
+#endif
+  delay(300);
+
+  // Scan 2.4 GHz only (ESP32-C6 has no 5 GHz). Xiaomi hotspot on 5 GHz = invisible.
+  report(onStatus, Status::ConnectingWifi, "Scanning 2.4G...");
+  int n = WiFi.scanNetworks(/*async=*/false, /*hidden=*/true);
+  if (n < 0) {
+    delay(500);
+    n = WiFi.scanNetworks(false, true);
+  }
+
+  bool seen = false;
+  int rssi = 0;
+  Serial.printf("[OTA] scan n=%d looking for '%s'\n", n, OTA_WIFI_SSID);
+  for (int i = 0; i < n; i++) {
+    const String id = WiFi.SSID(i);
+    Serial.printf("[OTA]  [%d] '%s' %d dBm ch=%d\n",
+                  i, id.c_str(), WiFi.RSSI(i), WiFi.channel(i));
+    if (ssidEquals(id, OTA_WIFI_SSID)) {
+      seen = true;
+      rssi = WiFi.RSSI(i);
+    }
+  }
+
+  if (!seen) {
+    // Show what we actually hear — helps catch 5 GHz / wrong name.
+    char line[48];
+    if (n <= 0) {
+      snprintf(line, sizeof(line), "0 nets (need 2.4G)");
+    } else {
+      snprintf(line, sizeof(line), "no %s (%d nets)", OTA_WIFI_SSID, n);
+    }
+    report(onStatus, Status::WifiFailed, line);
+    // Keep a few SSIDs on screen for ~2.5s via detail + Serial above.
+    delay(2500);
+
+    // Still try begin() — rare cases scan misses an AP that can associate.
+    report(onStatus, Status::ConnectingWifi, "Trying blind...");
+  } else {
+    char joining[40];
+    snprintf(joining, sizeof(joining), "%s %ddBm", OTA_WIFI_SSID, rssi);
+    report(onStatus, Status::ConnectingWifi, joining);
+  }
+
+  WiFi.scanDelete();
   WiFi.begin(OTA_WIFI_SSID, OTA_WIFI_PASS);
 
   const unsigned long t0 = millis();
+  wl_status_t last = WL_IDLE_STATUS;
   while (WiFi.status() != WL_CONNECTED) {
+    const wl_status_t st = WiFi.status();
+    if (st != last) {
+      last = st;
+      Serial.printf("[OTA] WiFi status=%d\n", (int)st);
+    }
     if (millis() - t0 > OTA_WIFI_TIMEOUT_MS) {
-      report(onStatus, Status::WifiFailed, "No hotspot");
+      char fail[40];
+      if (!seen) {
+        snprintf(fail, sizeof(fail), "Set hotspot 2.4GHz");
+      } else {
+        snprintf(fail, sizeof(fail), "Auth? st=%d", (int)st);
+      }
+      report(onStatus, Status::WifiFailed, fail);
+      WiFi.disconnect(true, true);
       WiFi.mode(WIFI_OFF);
       return false;
     }
-    delay(200);
+    delay(250);
   }
+
   Serial.printf("[OTA] WiFi OK %s\n", WiFi.localIP().toString().c_str());
+  report(onStatus, Status::ConnectingWifi, WiFi.localIP().toString().c_str());
   return true;
 }
 

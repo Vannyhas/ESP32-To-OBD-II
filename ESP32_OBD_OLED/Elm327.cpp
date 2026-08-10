@@ -242,16 +242,16 @@ bool Elm327::pollForPage(ObdData& data, uint8_t page) {
   }
 
   switch (page) {
-    case 1:  // PAGE_BAT
+    case 0:  // PAGE_BAT
       ok = queryVoltage(data.voltage);
       break;
-    case 2:  // PAGE_RPM
+    case 1:  // PAGE_RPM
       ok = queryRpm(data.rpm);
       break;
-    case 3:  // PAGE_COOLANT
+    case 2:  // PAGE_COOLANT
       ok = queryCoolantC(data.coolantC);
       break;
-    case 4:  // PAGE_AMBIENT
+    case 3:  // PAGE_AMBIENT
       if (ambientSupported_) {
         ok = queryAmbientC(data.ambientC);
         if (!ok) ambientSupported_ = false;
@@ -259,7 +259,7 @@ bool Elm327::pollForPage(ObdData& data, uint8_t page) {
         ok = queryCoolantC(data.coolantC);
       }
       break;
-    case 5:  // PAGE_TANK
+    case 4:  // PAGE_TANK
       if (fuelLevelSupported_) {
         ok = queryFuelLevel(data.fuelLevelPct);
         if (!ok) fuelLevelSupported_ = false;
@@ -267,10 +267,10 @@ bool Elm327::pollForPage(ObdData& data, uint8_t page) {
         ok = queryVoltage(data.voltage);
       }
       break;
-    case 6:  // PAGE_TRIP — already doing speed/maf often
+    case 5:  // PAGE_TRIP — already doing speed/maf often
       ok = querySpeed(data.speedKmh);
       break;
-    case 0: {  // PAGE_OVERVIEW — rotate visible fields
+    case 6: {  // PAGE_OVERVIEW — rotate visible fields
       static uint8_t ov = 0;
       switch (ov++ % 3) {
         case 0: ok = queryVoltage(data.voltage); break;

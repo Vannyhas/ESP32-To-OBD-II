@@ -216,7 +216,7 @@ void enterOtaMode() {
   trip.save();
   bleObd.disconnect();
   NimBLEDevice::deinit(true);
-  delay(100);
+  delay(500);  // let BT stack release radio before Wi‑Fi
 
   uiState = UI_OTA;
   drawOtaStatus("Starting...", OTA_WIFI_SSID);
@@ -226,7 +226,7 @@ void enterOtaMode() {
   const bool updating = OtaPull::checkAndUpdate(onOtaPullStatus);
   if (updating) return;  // reboot pending
 
-  delay(1200);
+  delay(1500);
   bleObd.begin("ESP32-OBD-LCD");
   uiState = UI_ERROR;
   statusMsg = "OTA done";
