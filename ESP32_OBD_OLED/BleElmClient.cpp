@@ -55,7 +55,9 @@ bool BleElmClient::begin(const char* localName) {
     disconnect();
   }
   NimBLEDevice::init(localName);
-  NimBLEDevice::setPower(9);  // dBm, NimBLE 2.x
+  NimBLEDevice::setPower(BLE_TX_POWER_DBM);  // dBm, see config.h
+  Serial.printf("[BLE] TX power set to %d dBm (actual=%d)\n",
+                (int)BLE_TX_POWER_DBM, NimBLEDevice::getPower());
 
   // Bonding + passkey available if the adapter asks for it.
   // MITM off by default so "Just Works" adapters still connect.

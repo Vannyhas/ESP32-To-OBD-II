@@ -35,6 +35,10 @@ enum BleUuidPreset {
 #define BLE_SCAN_SECONDS   8
 #define ELM_TIMEOUT_MS     800
 #define PID_INTERVAL_MS    0     // 0 = as fast as ELM answers
+// BLE TX power dBm (ESP steps ~3 dBm). Was +9 (max); +3 is cooler, still OK in-car.
+#define BLE_TX_POWER_DBM   3
+// CPU MHz while running gauge (160 default). 80 is enough for BLE+LCD UI.
+#define CPU_FREQ_MHZ       80
 
 // Harrier 1999 / Lexus RX 1st gen: ISO 9141-2 (K-Line pin 7).
 // ELM: 3 = ISO 9141-2. Do NOT use ATSP0 (auto) — wakes other ECUs harder.
@@ -72,7 +76,7 @@ enum BleUuidPreset {
 
 // ========================= WIFI OTA (GitHub pull) =========================
 // Long-press Overview → connect to phone hotspot → check GitHub for newer bin.
-#define FIRMWARE_VERSION   "1.2.2"
+#define FIRMWARE_VERSION   "1.2.3"
 #define OTA_WIFI_SSID      "13T"
 #define OTA_WIFI_PASS      "12121212"
 #define OTA_WIFI_TIMEOUT_MS 45000

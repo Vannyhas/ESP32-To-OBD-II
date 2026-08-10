@@ -703,7 +703,10 @@ bool handleRapidTapForMock() {
 void setup() {
   Serial.begin(115200);
   delay(200);
-  Serial.println("\n=== ESP32-C6 BLE OBD LCD 1.47 ===");
+  setCpuFrequencyMhz(CPU_FREQ_MHZ);
+  Serial.printf("\n=== ESP32-C6 BLE OBD LCD 1.47 ===\n");
+  Serial.printf("[SYS] CPU %u MHz  FW %s\n",
+                (unsigned)getCpuFrequencyMhz(), FIRMWARE_VERSION);
 
   pinMode(SD_CS, OUTPUT);
   digitalWrite(SD_CS, HIGH);
