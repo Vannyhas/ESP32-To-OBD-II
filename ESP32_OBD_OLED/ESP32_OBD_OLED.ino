@@ -262,7 +262,8 @@ void updateMockTelemetry() {
   telemetry.mafGps = 2.5f + 3.5f * (0.5f + 0.5f * sinf(t * 0.9f));
   telemetry.fuelRateLph = NAN;
   telemetry.fuelLevelPct = 55.0f + 20.0f * sinf(t * 0.15f);
-  telemetry.ambientC = 24.0f + 8.0f * sinf(t * 0.2f);
+  telemetry.intakeC = 28.0f + 10.0f * sinf(t * 0.22f);
+  telemetry.ambientC = NAN;
   telemetry.valid = true;
 }
 
@@ -567,8 +568,12 @@ void drawTankValues() {
   char pctBuf[16];
   char litBuf[28];
   const float pct = telemetry.fuelLevelPct;
+  const bool supported = elm.fuelLevelAvailable();
 
-  if (isnan(pct)) {
+  if (!supported) {
+    snprintf(pctBuf, sizeof(pctBuf), "N/A");
+    snprintf(litBuf, sizeof(litBuf), "ECU has no fuel %% PID");
+  } else if (isnan(pct)) {
     snprintf(pctBuf, sizeof(pctBuf), "--");
     snprintf(litBuf, sizeof(litBuf), "--.- L / %.0f L", TANK_CAPACITY_L);
   } else {
@@ -592,10 +597,12 @@ void drawTankValues() {
     gfx->setCursor(x, y);
     gfx->print(pctBuf);
 
-    gfx->setTextSize(3);
-    gfx->setTextColor(RGB565_GREENYELLOW);
-    gfx->setCursor(x + tw + 6, y + th - 28);
-    gfx->print('%');
+    if (supported) {
+      gfx->setTextSize(3);
+      gfx->setTextColor(RGB565_GREENYELLOW);
+      gfx->setCursor(x + tw + 6, y + th - 28);
+      gfx->print('%');
+    }
   }
 
   if (strcmp(litBuf, lastTankLines[1]) != 0) {
@@ -614,7 +621,7 @@ void renderLive() {
       case PAGE_BAT: drawValueChrome("BAT LVL", "V", RGB565_GREEN); break;
       case PAGE_RPM: drawValueChrome("RPM", "rpm", RGB565_ORANGE); break;
       case PAGE_COOLANT: drawValueChrome("Coolant", "C", RGB565_RED); break;
-      case PAGE_AMBIENT: drawValueChrome("Outside", "C", RGB565_CYAN); break;
+      case PAGE_AMBIENT: drawValueChrome("Intake", "C", RGB565_CYAN); break;
       case PAGE_TANK: drawTankChrome(); break;
       case PAGE_TRIP: drawFuelChrome(); break;
       default:
@@ -635,7 +642,7 @@ void renderLive() {
     case PAGE_BAT: drawBigValue(telemetry.voltage, 1); break;
     case PAGE_RPM: drawBigValue(telemetry.rpm, 0); break;
     case PAGE_COOLANT: drawBigValue(telemetry.coolantC, 0); break;
-    case PAGE_AMBIENT: drawBigValue(telemetry.ambientC, 0); break;
+    case PAGE_AMBIENT: drawBigValue(telemetry.intakeC, 0); break;
     case PAGE_TANK: drawTankValues(); break;
     case PAGE_TRIP: drawFuelValues(); break;
     default: break;

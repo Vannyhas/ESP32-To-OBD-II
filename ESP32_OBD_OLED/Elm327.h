@@ -11,8 +11,9 @@ struct ObdData {
   float engineLoad = NAN;   // 0104
   float mafGps = NAN;       // 0110 g/s
   float fuelRateLph = NAN;  // 015E L/h (if ECU supports)
-  float fuelLevelPct = NAN; // 012F tank level %
-  float ambientC = NAN;     // 0146 outside air °C
+  float fuelLevelPct = NAN; // 012F tank level % (often missing on old Toyota)
+  float intakeC = NAN;      // 010F intake air °C (common)
+  float ambientC = NAN;     // 0146 outside air °C (rare on 1999–2005 Toyota)
   bool valid = false;
 };
 
@@ -31,6 +32,10 @@ class Elm327 {
   bool queryFuelRate(float& out);
   bool queryFuelLevel(float& out);
   bool queryAmbientC(float& out);
+  bool queryIntakeC(float& out);
+
+  bool fuelLevelAvailable() const { return fuelLevelSupported_; }
+  bool ambientAvailable() const { return ambientSupported_; }
 
   bool pollNext(ObdData& data);  // round-robin one PID per call
   // Prefer PIDs for the active UI page; still refreshes trip sensors.
@@ -46,5 +51,7 @@ class Elm327 {
   uint8_t nextPid_ = 0;
   bool fuelRateSupported_ = true;  // disable after first NO DATA
   bool fuelLevelSupported_ = true;
-  bool ambientSupported_ = true;
+  bool ambientSupported_ = true;   // 0146; fall back to intake if false
+  uint8_t fuelLevelFailStreak_ = 0;
+  uint8_t ambientFailStreak_ = 0;
 };

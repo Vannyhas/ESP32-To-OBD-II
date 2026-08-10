@@ -5,6 +5,11 @@
 bool Elm327::begin(BleElmClient& link) {
   link_ = &link;
   ready_ = false;
+  fuelRateSupported_ = true;
+  fuelLevelSupported_ = true;
+  ambientSupported_ = true;
+  fuelLevelFailStreak_ = 0;
+  ambientFailStreak_ = 0;
   if (!link_->isConnected()) return false;
 
   delay(300);
@@ -208,7 +213,15 @@ bool Elm327::queryAmbientC(float& out) {
   uint8_t data[8];
   size_t n = 0;
   if (!sendPid(0x01, 0x46, data, n) || n < 1) return false;
-  out = (float)data[0] - 40.0f;  // same formula as coolant
+  out = (float)data[0] - 40.0f;
+  return true;
+}
+
+bool Elm327::queryIntakeC(float& out) {
+  uint8_t data[8];
+  size_t n = 0;
+  if (!sendPid(0x01, 0x0F, data, n) || n < 1) return false;
+  out = (float)data[0] - 40.0f;  // intake air temp
   return true;
 }
 
@@ -260,20 +273,31 @@ bool Elm327::pollForPage(ObdData& data, uint8_t page) {
     case 3:  // PAGE_COOLANT
       ok = queryCoolantC(data.coolantC);
       break;
-    case 4:  // PAGE_AMBIENT
-      if (ambientSupported_) {
-        ok = queryAmbientC(data.ambientC);
-        if (!ok) ambientSupported_ = false;
-      } else {
-        ok = queryCoolantC(data.coolantC);
+    case 4:  // PAGE_AMBIENT — Toyota Harrier/Platz: intake air 010F (not 0146)
+      ok = queryIntakeC(data.intakeC);
+      if (ok) data.ambientC = NAN;
+      // One-shot probe for real outside temp (rare on these cars)
+      if (ambientSupported_ && (tick % 30) == 1) {
+        float amb = NAN;
+        if (queryAmbientC(amb)) {
+          data.ambientC = amb;
+        } else if (++ambientFailStreak_ >= 2) {
+          ambientSupported_ = false;
+          Serial.println("[ELM] 0146 ambient not available (using intake 010F)");
+        }
       }
       break;
-    case 5:  // PAGE_TANK
+    case 5:  // PAGE_TANK — 012F often missing on pre‑CAN Toyota
       if (fuelLevelSupported_) {
         ok = queryFuelLevel(data.fuelLevelPct);
-        if (!ok) fuelLevelSupported_ = false;
+        if (ok) {
+          fuelLevelFailStreak_ = 0;
+        } else if (++fuelLevelFailStreak_ >= 3) {
+          fuelLevelSupported_ = false;
+          Serial.println("[ELM] 012F fuel level unsupported by ECU");
+        }
       } else {
-        ok = queryVoltage(data.voltage);
+        ok = false;
       }
       break;
     case 6:  // PAGE_TRIP — already doing speed/maf often
