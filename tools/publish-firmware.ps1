@@ -43,14 +43,12 @@ New-Item -ItemType Directory -Force -Path $destDir | Out-Null
 $dest = Join-Path $destDir $destName
 Copy-Item -Force $binSrc.FullName $dest
 
-$manifest = @{
-  version = $Version
-  file    = "bin/$destName"
-  size    = (Get-Item $dest).Length
-  notes   = "Published $(Get-Date -Format o)"
-} | ConvertTo-Json
+$size = (Get-Item $dest).Length
+# Compact JSON, UTF-8 without BOM (BOM breaks some parsers / confuses diffs)
+$manifestPath = Join-Path $Root "firmware\manifest.json"
+$manifestJson = "{`"version`":`"$Version`",`"file`":`"bin/$destName`",`"size`":$size,`"notes`":`"Published $(Get-Date -Format o)`"}"
+[System.IO.File]::WriteAllText($manifestPath, $manifestJson, [System.Text.UTF8Encoding]::new($false))
 
-Set-Content -Path (Join-Path $Root "firmware\manifest.json") -Value $manifest -Encoding utf8
 Write-Host "OK: $dest"
-Write-Host "Updated firmware\manifest.json"
+Write-Host "Updated firmware\manifest.json -> $manifestJson"
 Write-Host "Next: git add firmware; git commit; git push"

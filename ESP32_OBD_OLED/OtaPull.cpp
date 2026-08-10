@@ -27,9 +27,15 @@ int cmpVersion(const char* a, const char* b) {
 }
 
 bool extractJsonString(const String& json, const char* key, String& out) {
-  // Minimal extractor: "key" : "value"
+  // Minimal extractor: "key" : "value" (skip UTF-8 BOM if present)
+  int start = 0;
+  if (json.length() >= 3 && (uint8_t)json[0] == 0xEF && (uint8_t)json[1] == 0xBB &&
+      (uint8_t)json[2] == 0xBF) {
+    start = 3;
+  }
+
   String needle = String("\"") + key + "\"";
-  int k = json.indexOf(needle);
+  int k = json.indexOf(needle, start);
   if (k < 0) return false;
   int colon = json.indexOf(':', k + needle.length());
   if (colon < 0) return false;
@@ -38,6 +44,7 @@ bool extractJsonString(const String& json, const char* key, String& out) {
   int q2 = json.indexOf('"', q1 + 1);
   if (q2 < 0) return false;
   out = json.substring(q1 + 1, q2);
+  out.trim();
   return out.length() > 0;
 }
 
@@ -141,16 +148,25 @@ bool connectWifi(StatusFn onStatus) {
 
 bool httpGet(const String& url, String& body, StatusFn onStatus, Status failSt) {
   WiFiClientSecure client;
-  client.setInsecure();  // hobby: trust GitHub TLS without bundling CA
+  client.setInsecure();  // hobby: trust TLS without bundling CA
+
+  // Bust CDN caches (raw.githubusercontent / jsDelivr edges).
+  String urlNoCache = url;
+  urlNoCache += (url.indexOf('?') >= 0) ? "&" : "?";
+  urlNoCache += "t=";
+  urlNoCache += String(millis());
 
   HTTPClient http;
   http.setTimeout(20000);
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  http.setUserAgent("ESP32-OBD-OTA/1.0");
-  if (!http.begin(client, url)) {
+  http.setUserAgent("ESP32-OBD-OTA/1.1");
+  http.setReuse(false);
+  if (!http.begin(client, urlNoCache)) {
     report(onStatus, failSt, "HTTP begin fail");
     return false;
   }
+  http.addHeader("Cache-Control", "no-cache");
+  http.addHeader("Pragma", "no-cache");
 
   const int code = http.GET();
   if (code != HTTP_CODE_OK) {
@@ -162,6 +178,8 @@ bool httpGet(const String& url, String& body, StatusFn onStatus, Status failSt) 
   }
   body = http.getString();
   http.end();
+  Serial.printf("[OTA] GET %s -> %d bytes\n", url.c_str(), body.length());
+  Serial.println(body);
   return true;
 }
 
@@ -278,15 +296,21 @@ bool checkAndUpdate(StatusFn onStatus) {
                 FIRMWARE_VERSION, remoteVer.c_str(), fileRel.c_str());
 
   if (cmpVersion(remoteVer.c_str(), FIRMWARE_VERSION) <= 0) {
-    report(onStatus, Status::UpToDate, remoteVer.c_str());
+    char both[40];
+    snprintf(both, sizeof(both), "%s >= %s", FIRMWARE_VERSION, remoteVer.c_str());
+    report(onStatus, Status::UpToDate, both);
     WiFi.mode(WIFI_OFF);
     return false;
   }
 
+  char cmpMsg[40];
+  snprintf(cmpMsg, sizeof(cmpMsg), "%s -> %s", FIRMWARE_VERSION, remoteVer.c_str());
+  report(onStatus, Status::Downloading, cmpMsg, 0);
+
   String binUrl = String(OTA_GITHUB_BASE) + fileRel;
-  char msg[48];
-  snprintf(msg, sizeof(msg), "v%s", remoteVer.c_str());
-  report(onStatus, Status::Downloading, msg, 0);
+  binUrl += (binUrl.indexOf('?') >= 0) ? "&" : "?";
+  binUrl += "t=";
+  binUrl += String(millis());
 
   if (!downloadAndFlash(binUrl, onStatus)) {
     WiFi.mode(WIFI_OFF);
