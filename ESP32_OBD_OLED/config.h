@@ -48,13 +48,13 @@ enum BleUuidPreset {
 #define BTN_DEBOUNCE_MS    40
 #define BTN_LONG_MS        1500
 #define PAGE_COUNT         7
-#define PAGE_BAT           0
-#define PAGE_RPM           1
-#define PAGE_COOLANT       2
-#define PAGE_AMBIENT       3
-#define PAGE_TANK          4
-#define PAGE_TRIP          5
-#define PAGE_OVERVIEW      6
+#define PAGE_OVERVIEW      0
+#define PAGE_BAT           1
+#define PAGE_RPM           2
+#define PAGE_COOLANT       3
+#define PAGE_AMBIENT       4
+#define PAGE_TANK          5
+#define PAGE_TRIP          6
 #define UI_REFRESH_MS      250  // redraw live page at most this often
 
 // ========================= TRIP / FUEL =========================
@@ -72,7 +72,7 @@ enum BleUuidPreset {
 
 // ========================= WIFI OTA (GitHub pull) =========================
 // Long-press Overview → connect to phone hotspot → check GitHub for newer bin.
-#define FIRMWARE_VERSION   "1.1.3"
+#define FIRMWARE_VERSION   "1.2.0"
 #define OTA_WIFI_SSID      "13T"
 #define OTA_WIFI_PASS      "12121212"
 #define OTA_WIFI_TIMEOUT_MS 45000

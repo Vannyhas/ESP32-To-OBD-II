@@ -22,7 +22,7 @@ ObdData telemetry;
 enum UiState { UI_BOOT, UI_SCAN, UI_CONNECT, UI_INIT, UI_LIVE, UI_ERROR, UI_MOCK, UI_OTA };
 UiState uiState = UI_BOOT;
 String statusMsg = "Boot";
-uint8_t page = PAGE_BAT;
+uint8_t page = PAGE_OVERVIEW;
 bool layoutDirty = true;
 bool valuesDirty = true;
 bool displayOff = false;
@@ -122,7 +122,7 @@ void nextPage() {
 }
 
 void goToBatScreen() {
-  page = PAGE_BAT;
+  page = PAGE_OVERVIEW;
   invalidateUi(true);
 }
 

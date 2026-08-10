@@ -242,35 +242,7 @@ bool Elm327::pollForPage(ObdData& data, uint8_t page) {
   }
 
   switch (page) {
-    case 0:  // PAGE_BAT
-      ok = queryVoltage(data.voltage);
-      break;
-    case 1:  // PAGE_RPM
-      ok = queryRpm(data.rpm);
-      break;
-    case 2:  // PAGE_COOLANT
-      ok = queryCoolantC(data.coolantC);
-      break;
-    case 3:  // PAGE_AMBIENT
-      if (ambientSupported_) {
-        ok = queryAmbientC(data.ambientC);
-        if (!ok) ambientSupported_ = false;
-      } else {
-        ok = queryCoolantC(data.coolantC);
-      }
-      break;
-    case 4:  // PAGE_TANK
-      if (fuelLevelSupported_) {
-        ok = queryFuelLevel(data.fuelLevelPct);
-        if (!ok) fuelLevelSupported_ = false;
-      } else {
-        ok = queryVoltage(data.voltage);
-      }
-      break;
-    case 5:  // PAGE_TRIP — already doing speed/maf often
-      ok = querySpeed(data.speedKmh);
-      break;
-    case 6: {  // PAGE_OVERVIEW — rotate visible fields
+    case 0: {  // PAGE_OVERVIEW — rotate visible fields
       static uint8_t ov = 0;
       switch (ov++ % 3) {
         case 0: ok = queryVoltage(data.voltage); break;
@@ -279,6 +251,34 @@ bool Elm327::pollForPage(ObdData& data, uint8_t page) {
       }
       break;
     }
+    case 1:  // PAGE_BAT
+      ok = queryVoltage(data.voltage);
+      break;
+    case 2:  // PAGE_RPM
+      ok = queryRpm(data.rpm);
+      break;
+    case 3:  // PAGE_COOLANT
+      ok = queryCoolantC(data.coolantC);
+      break;
+    case 4:  // PAGE_AMBIENT
+      if (ambientSupported_) {
+        ok = queryAmbientC(data.ambientC);
+        if (!ok) ambientSupported_ = false;
+      } else {
+        ok = queryCoolantC(data.coolantC);
+      }
+      break;
+    case 5:  // PAGE_TANK
+      if (fuelLevelSupported_) {
+        ok = queryFuelLevel(data.fuelLevelPct);
+        if (!ok) fuelLevelSupported_ = false;
+      } else {
+        ok = queryVoltage(data.voltage);
+      }
+      break;
+    case 6:  // PAGE_TRIP — already doing speed/maf often
+      ok = querySpeed(data.speedKmh);
+      break;
     default: {
       // background round-robin for unused PIDs
       static uint8_t bg = 0;
