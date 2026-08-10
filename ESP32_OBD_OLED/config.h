@@ -72,13 +72,13 @@ enum BleUuidPreset {
 
 // ========================= WIFI OTA (GitHub pull) =========================
 // Long-press Overview → connect to phone hotspot → check GitHub for newer bin.
-#define FIRMWARE_VERSION   "1.2.0"
+#define FIRMWARE_VERSION   "1.2.1"
 #define OTA_WIFI_SSID      "13T"
 #define OTA_WIFI_PASS      "12121212"
 #define OTA_WIFI_TIMEOUT_MS 45000
 // Prefer raw GitHub + ?t= cache-bust (jsDelivr @main can lag for hours).
 #define OTA_GITHUB_BASE \
-  "https://raw.githubusercontent.com/Vannyhas/ESP32-To-OBD-II/main/firmware/"
+  "https://raw.githubusercontent.com/Vannyhas/ESP32-To-OBD-II/refs/heads/main/firmware/"
 
 // Legacy AP upload (unused by UI; kept for emergency tools)
 #define OTA_AP_SSID        "ESP32-OBD-OTA"
