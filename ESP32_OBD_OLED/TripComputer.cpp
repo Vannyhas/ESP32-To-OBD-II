@@ -43,7 +43,7 @@ float TripComputer::avgLPer100() const {
   return (fuelL_ / distanceKm_) * 100.0f;
 }
 
-void TripComputer::update(const ObdData& data, bool /*mockMode*/) {
+void TripComputer::update(const ObdData& data, bool mockMode) {
   const unsigned long now = millis();
   float dt = (now - lastMs_) / 1000.0f;
   if (lastMs_ == 0 || dt <= 0 || dt > 5.0f) {
@@ -51,6 +51,13 @@ void TripComputer::update(const ObdData& data, bool /*mockMode*/) {
     return;
   }
   lastMs_ = now;
+
+  // Mock must never pollute real trip totals (same NVS as live OBD).
+  if (mockMode) {
+    fuelLph_ = NAN;
+    instantL100_ = NAN;
+    return;
+  }
 
   // Fuel rate: prefer PID 015E, else MAF
   if (!isnan(data.fuelRateLph) && data.fuelRateLph >= 0) {

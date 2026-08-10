@@ -320,6 +320,8 @@ void exitMockMode() {
   Serial.println("[UI] Mock mode OFF");
   lastReconnectMs = 0;
   trip.save();
+  // Drop fake sensors so live OBD doesn't briefly inherit mock MAF/RPM.
+  telemetry = ObdData{};
   bleObd.begin("ESP32-OBD-LCD");
 }
 
