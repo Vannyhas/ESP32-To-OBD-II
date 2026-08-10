@@ -273,19 +273,8 @@ bool Elm327::pollForPage(ObdData& data, uint8_t page) {
     case 3:  // PAGE_COOLANT
       ok = queryCoolantC(data.coolantC);
       break;
-    case 4:  // PAGE_AMBIENT — Toyota Harrier/Platz: intake air 010F (not 0146)
+    case 4:  // PAGE_AMBIENT → Intake Air Temp PID 010F (Torque "Intake")
       ok = queryIntakeC(data.intakeC);
-      if (ok) data.ambientC = NAN;
-      // One-shot probe for real outside temp (rare on these cars)
-      if (ambientSupported_ && (tick % 30) == 1) {
-        float amb = NAN;
-        if (queryAmbientC(amb)) {
-          data.ambientC = amb;
-        } else if (++ambientFailStreak_ >= 2) {
-          ambientSupported_ = false;
-          Serial.println("[ELM] 0146 ambient not available (using intake 010F)");
-        }
-      }
       break;
     case 5:  // PAGE_TANK — 012F often missing on pre‑CAN Toyota
       if (fuelLevelSupported_) {
