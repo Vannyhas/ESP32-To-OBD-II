@@ -219,6 +219,7 @@ void onOtaPullStatus(OtaPull::Status st, const char* detail, int progressPct) {
 void enterOtaMode() {
   trip.save();
   bleObd.end();
+  telemetry = ObdData{};  // don't carry mock sensors across Wi‑Fi OTA
   delay(500);  // let BT stack release radio before Wi‑Fi
 
   uiState = UI_OTA;
@@ -230,6 +231,7 @@ void enterOtaMode() {
   if (updating) return;  // reboot pending
 
   delay(1500);
+  telemetry = ObdData{};
   bleObd.begin("ESP32-OBD-LCD");
   uiState = UI_ERROR;
   statusMsg = "OTA done";
@@ -677,6 +679,7 @@ bool connectAndInit() {
 
   uiState = UI_LIVE;
   lastPidMs = 0;
+  telemetry = ObdData{};  // start clean; no stale mock/live mix
   setDisplayPower(true);
   goToBatScreen();
   showStatus("Connected!", "hold BAT=sleep");
