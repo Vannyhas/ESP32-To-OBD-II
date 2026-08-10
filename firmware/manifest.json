@@ -1,0 +1,5 @@
+{
+  "version": "1.0.0",
+  "file": "bin/esp32-obd-1.0.0.bin",
+  "notes": "Initial pull-OTA release placeholder. Replace bin after first publish."
+}

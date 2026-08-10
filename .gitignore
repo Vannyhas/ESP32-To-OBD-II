@@ -1,0 +1,16 @@
+# Temporary files / Arduino
+.pio/
+.vscode/
+*.elf
+*.map
+**/build/
+**/__vm/
+
+# Secrets / local
+.env
+*.pem
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
