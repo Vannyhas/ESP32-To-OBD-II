@@ -1,5 +1,6 @@
-{
-  "version": "1.0.0",
-  "file": "bin/esp32-obd-1.0.0.bin",
-  "notes": "Initial pull-OTA release placeholder. Replace bin after first publish."
+﻿{
+    "notes":  "Published 2026-08-10T22:00:39.0572033+07:00",
+    "version":  "1.0.0",
+    "size":  1606752,
+    "file":  "bin/esp32-obd-1.0.0.bin"
 }

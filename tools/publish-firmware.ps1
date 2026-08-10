@@ -26,17 +26,10 @@ if (-not $Version) {
   $Version = $m.Matches[0].Groups[1].Value
 }
 
-Write-Host "Building $SketchDir version $Version ..."
-arduino-cli compile --fqbn $Fqbn (Join-Path $Root $SketchDir)
-if ($LASTEXITCODE -ne 0) { throw "compile failed" }
-
-$buildRoot = Join-Path $env:LOCALAPPDATA "Arduino15\build"
-# arduino-cli puts .bin next to sketch build dir — locate newest matching bin
-$candidates = @()
-$candidates += Get-ChildItem -Path (Join-Path $Root $SketchDir) -Filter "*.bin" -Recurse -ErrorAction SilentlyContinue
 $cliOut = Join-Path $env:TEMP "arduino-cli-obd-build"
+Write-Host "Building $SketchDir version $Version ..."
 arduino-cli compile --fqbn $Fqbn --output-dir $cliOut (Join-Path $Root $SketchDir) | Out-Host
-if ($LASTEXITCODE -ne 0) { throw "compile --output-dir failed" }
+if ($LASTEXITCODE -ne 0) { throw "compile failed" }
 
 $binSrc = Get-ChildItem -Path $cliOut -Filter "*.ino.bin" | Select-Object -First 1
 if (-not $binSrc) {
