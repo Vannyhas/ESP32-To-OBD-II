@@ -61,10 +61,14 @@ void TripComputer::update(const ObdData& data, bool /*mockMode*/) {
     fuelLph_ = NAN;
   }
 
+  // Key ON but engine stopped: MAF/ECU can still chatter — ignore fuel.
+  const bool engineOn = !isnan(data.rpm) && data.rpm >= TRIP_MIN_RPM;
   const bool moving = !isnan(data.speedKmh) && data.speedKmh >= 1.0f;
 
-  if (!isnan(fuelLph_) && fuelLph_ > 0) {
+  if (engineOn && !isnan(fuelLph_) && fuelLph_ > 0) {
     fuelL_ += fuelLph_ * (dt / 3600.0f);
+  } else if (!engineOn) {
+    fuelLph_ = 0;
   }
 
   if (moving) {
@@ -72,7 +76,7 @@ void TripComputer::update(const ObdData& data, bool /*mockMode*/) {
     haveSpeed_ = true;
   }
 
-  if (moving && !isnan(fuelLph_) && data.speedKmh > 1.0f) {
+  if (engineOn && moving && !isnan(fuelLph_) && data.speedKmh > 1.0f) {
     // L/100km = (L/h) / (km/h) * 100
     instantL100_ = (fuelLph_ / data.speedKmh) * 100.0f;
   } else {

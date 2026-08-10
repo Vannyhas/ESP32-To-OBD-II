@@ -64,6 +64,8 @@ enum BleUuidPreset {
 // ========================= TRIP / FUEL =========================
 #define TRIP_MIN_KM        0.2f    // min distance before avg L/100 is shown
 #define TRIP_SAVE_MS       15000   // autosave interval to NVS
+// Don't integrate fuel unless engine is actually spinning (key-ON / MAF noise).
+#define TRIP_MIN_RPM       400.0f
 // Tank capacity for liters estimate from PID 012F (%).
 // Toyota Harrier XU10 / RX ~65 L — поправь при необходимости.
 #define TANK_CAPACITY_L    65.0f
@@ -76,7 +78,7 @@ enum BleUuidPreset {
 
 // ========================= WIFI OTA (GitHub pull) =========================
 // Long-press Overview → connect to phone hotspot → check GitHub for newer bin.
-#define FIRMWARE_VERSION   "1.2.5"
+#define FIRMWARE_VERSION   "1.2.6"
 #define OTA_WIFI_SSID      "13T"
 #define OTA_WIFI_PASS      "12121212"
 #define OTA_WIFI_TIMEOUT_MS 45000

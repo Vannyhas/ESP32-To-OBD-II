@@ -239,16 +239,26 @@ bool Elm327::pollForPage(ObdData& data, uint8_t page) {
   bool ok = false;
 
   if ((tick % 3) == 0) {
-    if ((tick % 6) == 0) {
-      ok = querySpeed(data.speedKmh);
-    } else if (fuelRateSupported_) {
-      ok = queryFuelRate(data.fuelRateLph);
-      if (!ok) {
-        fuelRateSupported_ = false;
-        ok = queryMaf(data.mafGps);
-      }
-    } else {
-      ok = queryMaf(data.mafGps);
+    // Keep trip math alive: speed, RPM (engine-on gate), MAF/fuel-rate.
+    static uint8_t tripSlot = 0;
+    switch (tripSlot++ % 3) {
+      case 0:
+        ok = querySpeed(data.speedKmh);
+        break;
+      case 1:
+        ok = queryRpm(data.rpm);
+        break;
+      default:
+        if (fuelRateSupported_) {
+          ok = queryFuelRate(data.fuelRateLph);
+          if (!ok) {
+            fuelRateSupported_ = false;
+            ok = queryMaf(data.mafGps);
+          }
+        } else {
+          ok = queryMaf(data.mafGps);
+        }
+        break;
     }
     if (ok) data.valid = true;
     return ok;
