@@ -269,7 +269,7 @@ void enterMockMode() {
   goToBatScreen();
   updateMockTelemetry();
   setDisplayPower(true);
-  showStatus("MOCK MODE", "hold BAT = sleep");
+  showStatus("MOCK MODE", "hold RPM = exit");
   delay(400);
   invalidateUi(true);
   Serial.println("[UI] Mock mode ON");
@@ -639,6 +639,11 @@ bool connectAndInit() {
 }
 
 bool handleRapidTapForMock() {
+  // While MOCK is on, 5x taps do nothing — exit only via long-press on RPM.
+  if (uiState == UI_MOCK) {
+    return false;
+  }
+
   const unsigned long now = millis();
   if (rapidTaps == 0 || (now - rapidTapStartMs) > MOCK_TAP_WINDOW_MS) {
     rapidTaps = 1;
@@ -651,11 +656,7 @@ bool handleRapidTapForMock() {
 
   if (rapidTaps >= MOCK_TAP_COUNT) {
     rapidTaps = 0;
-    if (uiState == UI_MOCK) {
-      exitMockMode();
-    } else {
-      enterMockMode();
-    }
+    enterMockMode();
     return true;
   }
   return false;
@@ -755,6 +756,10 @@ void loop() {
 
   if (longPress) {
     rapidTaps = 0;
+    if (uiState == UI_MOCK && page == PAGE_RPM) {
+      exitMockMode();
+      return;
+    }
     if (uiState == UI_LIVE || uiState == UI_MOCK) {
       if (page == PAGE_TRIP) {
         resetTripWithFeedback();

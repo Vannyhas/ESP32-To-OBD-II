@@ -52,3 +52,12 @@ $manifestJson = "{`"version`":`"$Version`",`"file`":`"bin/$destName`",`"size`":$
 Write-Host "OK: $dest"
 Write-Host "Updated firmware\manifest.json -> $manifestJson"
 Write-Host "Next: git add firmware; git commit; git push"
+
+# Best-effort purge if anyone still hits jsDelivr mirrors
+try {
+  Invoke-WebRequest "https://purge.jsdelivr.net/gh/Vannyhas/ESP32-To-OBD-II@main/firmware/manifest.json" -UseBasicParsing | Out-Null
+  Invoke-WebRequest "https://purge.jsdelivr.net/gh/Vannyhas/ESP32-To-OBD-II@main/firmware/bin/$destName" -UseBasicParsing | Out-Null
+  Write-Host "jsDelivr purge requested"
+} catch {
+  Write-Host "jsDelivr purge skipped: $($_.Exception.Message)"
+}
