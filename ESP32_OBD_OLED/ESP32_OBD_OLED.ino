@@ -447,6 +447,14 @@ static void paintTextInRect(int x, int y, int w, int h, const char* text,
 
 static char valueUnit[16];
 static uint16_t valueAccent = RGB565_WHITE;
+static int lastValueBoxX = 10;
+static int lastValueBoxY = 32;
+static int lastValueBoxW = 0;
+static int lastValueBoxH = 0;
+static int lastUnitBoxX = 10;
+static int lastUnitBoxY = 32;
+static int lastUnitBoxW = 0;
+static int lastUnitBoxH = 0;
 
 static int textWidthPx(const char* text, uint8_t size) {
   return (int)strlen(text) * 6 * size;
@@ -511,6 +519,10 @@ void drawValueChrome(const char* label, const char* unit, uint16_t accent) {
   strncpy(valueUnit, unit, sizeof(valueUnit) - 1);
   valueUnit[sizeof(valueUnit) - 1] = 0;
   valueAccent = accent;
+  lastValueBoxW = 0;
+  lastValueBoxH = 0;
+  lastUnitBoxW = 0;
+  lastUnitBoxH = 0;
 
   drawPageDots(accent);
   lastBigValue[0] = 0;
@@ -527,14 +539,36 @@ void drawBigValue(float value, int decimals) {
   strncpy(lastBigValue, buf, sizeof(lastBigValue) - 1);
   lastBigValue[sizeof(lastBigValue) - 1] = 0;
 
-  // Clear main stage (leave top label + bottom dots)
-  gfx->fillRect(10, 32, SCREEN_WIDTH - 14, SCREEN_HEIGHT - 48, RGB565_BLACK);
-
   const uint8_t size = fitTextSize(buf, SCREEN_WIDTH - 70, 9, 5);
   const int tw = textWidthPx(buf, size);
   const int th = 8 * size;
   const int x = (SCREEN_WIDTH - tw) / 2;
   const int y = 32 + (SCREEN_HEIGHT - 48 - th) / 2;
+  const int valuePad = 6;
+  const int valueBoxX = x - valuePad;
+  const int valueBoxY = y - valuePad;
+  const int valueBoxW = tw + valuePad * 2;
+  const int valueBoxH = th + valuePad * 2;
+
+  int ux = x + tw + 8;
+  int uy = y + th - 18;
+  const int unitWidth = textWidthPx(valueUnit, 2);
+  if (ux + unitWidth > SCREEN_WIDTH - 4) {
+    ux = x;
+    uy = y + th + 4;
+  }
+  const int unitPad = 4;
+  const int unitBoxX = ux - unitPad;
+  const int unitBoxY = uy - unitPad;
+  const int unitBoxW = unitWidth + unitPad * 2;
+  const int unitBoxH = 16 + unitPad * 2;
+
+  if (lastValueBoxW > 0 && lastValueBoxH > 0) {
+    gfx->fillRect(lastValueBoxX, lastValueBoxY, lastValueBoxW, lastValueBoxH, RGB565_BLACK);
+  }
+  if (lastUnitBoxW > 0 && lastUnitBoxH > 0) {
+    gfx->fillRect(lastUnitBoxX, lastUnitBoxY, lastUnitBoxW, lastUnitBoxH, RGB565_BLACK);
+  }
 
   gfx->setTextSize(size);
   gfx->setTextColor(RGB565_WHITE);
@@ -544,14 +578,17 @@ void drawBigValue(float value, int decimals) {
   // Unit to the right of the number
   gfx->setTextSize(2);
   gfx->setTextColor(valueAccent);
-  int ux = x + tw + 8;
-  int uy = y + th - 18;
-  if (ux + textWidthPx(valueUnit, 2) > SCREEN_WIDTH - 4) {
-    ux = x;
-    uy = y + th + 4;
-  }
   gfx->setCursor(ux, uy);
   gfx->print(valueUnit);
+
+  lastValueBoxX = valueBoxX;
+  lastValueBoxY = valueBoxY;
+  lastValueBoxW = valueBoxW;
+  lastValueBoxH = valueBoxH;
+  lastUnitBoxX = unitBoxX;
+  lastUnitBoxY = unitBoxY;
+  lastUnitBoxW = unitBoxW;
+  lastUnitBoxH = unitBoxH;
 }
 
 void drawFuelChrome() {
