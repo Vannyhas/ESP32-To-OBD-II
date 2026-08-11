@@ -1,5 +1,6 @@
 #include <Arduino_GFX_Library.h>
 #include <Preferences.h>
+#include <canvas/Arduino_Canvas.h>
 #include <math.h>
 #include <string.h>
 
@@ -16,6 +17,12 @@ Arduino_GFX *gfx = new Arduino_ST7789(
     172 /* width */, 320 /* height */,
     34 /* col offset 1 */, 0 /* row offset 1 */,
     34 /* col offset 2 */, 0 /* row offset 2 */);
+constexpr int VALUE_STAGE_X = 10;
+constexpr int VALUE_STAGE_Y = 32;
+constexpr int VALUE_STAGE_W = SCREEN_WIDTH - 14;
+constexpr int VALUE_STAGE_H = SCREEN_HEIGHT - 48;
+Arduino_Canvas *valueCanvas = new Arduino_Canvas(
+    VALUE_STAGE_W, VALUE_STAGE_H, gfx, VALUE_STAGE_X, VALUE_STAGE_Y);
 
 Elm327 elm;
 ObdData telemetry;
@@ -501,14 +508,6 @@ static void paintTextInRect(int x, int y, int w, int h, const char* text,
 
 static char valueUnit[16];
 static uint16_t valueAccent = RGB565_WHITE;
-static int lastValueBoxX = 10;
-static int lastValueBoxY = 32;
-static int lastValueBoxW = 0;
-static int lastValueBoxH = 0;
-static int lastUnitBoxX = 10;
-static int lastUnitBoxY = 32;
-static int lastUnitBoxW = 0;
-static int lastUnitBoxH = 0;
 
 static int textWidthPx(const char* text, uint8_t size) {
   return (int)strlen(text) * 6 * size;
@@ -573,10 +572,6 @@ void drawValueChrome(const char* label, const char* unit, uint16_t accent) {
   strncpy(valueUnit, unit, sizeof(valueUnit) - 1);
   valueUnit[sizeof(valueUnit) - 1] = 0;
   valueAccent = accent;
-  lastValueBoxW = 0;
-  lastValueBoxH = 0;
-  lastUnitBoxW = 0;
-  lastUnitBoxH = 0;
 
   drawPageDots(accent);
   lastBigValue[0] = 0;
@@ -593,56 +588,34 @@ void drawBigValue(float value, int decimals) {
   strncpy(lastBigValue, buf, sizeof(lastBigValue) - 1);
   lastBigValue[sizeof(lastBigValue) - 1] = 0;
 
+  if (!valueCanvas) return;
+
   const uint8_t size = fitTextSize(buf, SCREEN_WIDTH - 70, 9, 5);
   const int tw = textWidthPx(buf, size);
   const int th = 8 * size;
-  const int x = (SCREEN_WIDTH - tw) / 2;
-  const int y = 32 + (SCREEN_HEIGHT - 48 - th) / 2;
-  const int valuePad = 6;
-  const int valueBoxX = x - valuePad;
-  const int valueBoxY = y - valuePad;
-  const int valueBoxW = tw + valuePad * 2;
-  const int valueBoxH = th + valuePad * 2;
+  const int x = (VALUE_STAGE_W - tw) / 2;
+  const int y = (VALUE_STAGE_H - th) / 2;
 
   int ux = x + tw + 8;
   int uy = y + th - 18;
   const int unitWidth = textWidthPx(valueUnit, 2);
-  if (ux + unitWidth > SCREEN_WIDTH - 4) {
+  if (ux + unitWidth > VALUE_STAGE_W - 4) {
     ux = x;
     uy = y + th + 4;
   }
-  const int unitPad = 4;
-  const int unitBoxX = ux - unitPad;
-  const int unitBoxY = uy - unitPad;
-  const int unitBoxW = unitWidth + unitPad * 2;
-  const int unitBoxH = 16 + unitPad * 2;
 
-  if (lastValueBoxW > 0 && lastValueBoxH > 0) {
-    gfx->fillRect(lastValueBoxX, lastValueBoxY, lastValueBoxW, lastValueBoxH, RGB565_BLACK);
-  }
-  if (lastUnitBoxW > 0 && lastUnitBoxH > 0) {
-    gfx->fillRect(lastUnitBoxX, lastUnitBoxY, lastUnitBoxW, lastUnitBoxH, RGB565_BLACK);
-  }
-
-  gfx->setTextSize(size);
-  gfx->setTextColor(RGB565_WHITE);
-  gfx->setCursor(x, y);
-  gfx->print(buf);
+  valueCanvas->fillScreen(RGB565_BLACK);
+  valueCanvas->setTextSize(size);
+  valueCanvas->setTextColor(RGB565_WHITE);
+  valueCanvas->setCursor(x, y);
+  valueCanvas->print(buf);
 
   // Unit to the right of the number
-  gfx->setTextSize(2);
-  gfx->setTextColor(valueAccent);
-  gfx->setCursor(ux, uy);
-  gfx->print(valueUnit);
-
-  lastValueBoxX = valueBoxX;
-  lastValueBoxY = valueBoxY;
-  lastValueBoxW = valueBoxW;
-  lastValueBoxH = valueBoxH;
-  lastUnitBoxX = unitBoxX;
-  lastUnitBoxY = unitBoxY;
-  lastUnitBoxW = unitBoxW;
-  lastUnitBoxH = unitBoxH;
+  valueCanvas->setTextSize(2);
+  valueCanvas->setTextColor(valueAccent);
+  valueCanvas->setCursor(ux, uy);
+  valueCanvas->print(valueUnit);
+  valueCanvas->flush();
 }
 
 void drawFuelChrome() {
@@ -891,6 +864,9 @@ void setup() {
 
   if (!gfx->begin()) {
     Serial.println("LCD init failed");
+  }
+  if (!valueCanvas->begin(GFX_SKIP_OUTPUT_BEGIN)) {
+    Serial.println("Value canvas alloc failed");
   }
   gfx->fillScreen(RGB565_BLACK);
 
