@@ -1,4 +1,5 @@
 #include <Arduino_GFX_Library.h>
+#include <Preferences.h>
 #include <math.h>
 #include <string.h>
 
@@ -31,6 +32,7 @@ unsigned long lastPidMs = 0;
 unsigned long lastReconnectMs = 0;
 unsigned long lastMockMs = 0;
 unsigned long lastTripMs = 0;
+Preferences uiPrefs;
 
 bool btnStable = false;
 bool btnLastRaw = false;
@@ -114,6 +116,10 @@ void exitOtaMode();
 void drawOtaScreen();
 void setDisplayPower(bool on);
 void goToBatScreen();
+void saveUiState();
+void restoreUiState();
+void applyUiState(uint8_t newPage, bool screenOff);
+void drawScreenOffChrome();
 
 bool readButtonRaw() {
   const int v = digitalRead(BTN_PIN);
@@ -176,14 +182,13 @@ void invalidateUi(bool fullLayout) {
 
 void nextPage() {
   if (displayOff) return;
-  page = (page + 1) % PAGE_COUNT;
-  invalidateUi(true);
+  const uint8_t next = (page + 1) % PAGE_COUNT;
+  applyUiState(next, next == PAGE_SCREEN_OFF);
   Serial.printf("[UI] page=%u\n", page);
 }
 
 void goToBatScreen() {
-  page = PAGE_OVERVIEW;
-  invalidateUi(true);
+  applyUiState(PAGE_OVERVIEW, false);
 }
 
 void setDisplayPower(bool on) {
@@ -191,12 +196,42 @@ void setDisplayPower(bool on) {
   if (on) {
     digitalWrite(LCD_BL, HIGH);
     invalidateUi(true);
+    saveUiState();
     Serial.println("[UI] display ON");
   } else {
     gfx->fillScreen(RGB565_BLACK);
     digitalWrite(LCD_BL, LOW);
     drawnPage = -1;
+    saveUiState();
     Serial.println("[UI] display OFF");
+  }
+}
+
+void saveUiState() {
+  uiPrefs.putUChar("page", page);
+  uiPrefs.putBool("off", displayOff);
+}
+
+void restoreUiState() {
+  uint8_t savedPage = uiPrefs.getUChar("page", PAGE_OVERVIEW);
+  if (savedPage >= PAGE_COUNT) savedPage = PAGE_OVERVIEW;
+  const bool savedOff = uiPrefs.getBool("off", false);
+  page = savedPage;
+  displayOff = false;
+  invalidateUi(true);
+  setDisplayPower(!savedOff);
+}
+
+void applyUiState(uint8_t newPage, bool screenOff) {
+  if (newPage >= PAGE_COUNT) newPage = PAGE_OVERVIEW;
+  page = newPage;
+  invalidateUi(true);
+  if (screenOff) {
+    setDisplayPower(false);
+  } else if (displayOff) {
+    setDisplayPower(true);
+  } else {
+    saveUiState();
   }
 }
 
@@ -336,8 +371,8 @@ void handleLongPressActions() {
       resetTripWithFeedback();
     } else if (page == PAGE_OVERVIEW) {
       enterOtaMode();
-    } else if (page == PAGE_BAT) {
-      setDisplayPower(false);
+    } else if (page == PAGE_SCREEN_OFF) {
+      setDisplayPower(true);
     }
   }
 }
@@ -362,10 +397,9 @@ void elmUiYield() {
 void enterMockMode() {
   bleObd.end();  // full radio off — no heat in mock
   uiState = UI_MOCK;
-  goToBatScreen();
+  restoreUiState();
   updateMockTelemetry();
   resetRpmDisplay();
-  setDisplayPower(true);
   showStatus("MOCK MODE", "hold RPM = exit");
   delay(400);
   invalidateUi(true);
@@ -423,6 +457,26 @@ void drawPageDots(uint16_t accent) {
     gfx->setCursor(8, SCREEN_HEIGHT - 14);
     gfx->print(F("MOCK"));
   }
+}
+
+void drawScreenOffChrome() {
+  gfx->fillScreen(RGB565_BLACK);
+  gfx->fillRect(0, 0, 5, SCREEN_HEIGHT, RGB565_DARKGREY);
+  gfx->setTextColor(RGB565_DARKGREY);
+  gfx->setTextSize(2);
+  gfx->setCursor(14, 8);
+  gfx->print(F("Screen Off"));
+
+  gfx->setTextSize(1);
+  gfx->setTextColor(RGB565_LIGHTGREY);
+  gfx->setCursor(14, 44);
+  gfx->print(F("Trip and BLE keep running"));
+  gfx->setCursor(14, 60);
+  gfx->print(F("short press = Overview"));
+  gfx->setCursor(14, 76);
+  gfx->print(F("hold = wake display"));
+
+  drawPageDots(RGB565_DARKGREY);
 }
 
 static void fmtOrDash(char* out, size_t n, const char* prefix, float v, int decimals,
@@ -723,6 +777,7 @@ void renderLive() {
       case PAGE_AMBIENT: drawValueChrome("Intake", "C", RGB565_CYAN); break;
       case PAGE_TANK: drawTankChrome(); break;
       case PAGE_TRIP: drawFuelChrome(); break;
+      case PAGE_SCREEN_OFF: drawScreenOffChrome(); break;
       default:
         page = PAGE_OVERVIEW;
         drawOverviewChrome();
@@ -744,6 +799,7 @@ void renderLive() {
     case PAGE_AMBIENT: drawBigValue(telemetry.intakeC, 0); break;
     case PAGE_TANK: drawTankValues(); break;
     case PAGE_TRIP: drawFuelValues(); break;
+    case PAGE_SCREEN_OFF: break;
     default: break;
   }
 }
@@ -776,9 +832,8 @@ bool connectAndInit() {
   lastPidMs = 0;
   telemetry = ObdData{};  // start clean; no stale mock/live mix
   resetRpmDisplay();
-  setDisplayPower(true);
-  goToBatScreen();
-  showStatus("Connected!", "hold BAT=sleep");
+  restoreUiState();
+  showStatus("Connected!", "restoring last page");
   delay(400);
   invalidateUi(true);
   return true;
@@ -832,6 +887,7 @@ void setup() {
   lastBigValue[0] = 0;
 
   trip.begin();
+  uiPrefs.begin("ui", false);
 
   if (!gfx->begin()) {
     Serial.println("LCD init failed");
@@ -876,6 +932,9 @@ void loop() {
     if (longPress) {
       rapidTaps = 0;
       setDisplayPower(true);
+    } else if (releasedEdge && !btnLongHandled &&
+               (millis() - btnPressStartMs) < BTN_LONG_MS) {
+      applyUiState(PAGE_OVERVIEW, false);
     }
     // Keep trip/OBD alive quietly while screen is off
     if (uiState == UI_MOCK) {
