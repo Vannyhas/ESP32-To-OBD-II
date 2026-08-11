@@ -71,7 +71,7 @@ void resetRpmDisplay() {
   lastRpmShown = -1;
 }
 
-// Visual interpolation between OBD RPM samples.
+// Visual slew toward latest OBD RPM (keeps moving even when ELM repeats a value).
 void updateRpmDisplay() {
   if (page != PAGE_RPM) {
     rpmDisplay = telemetry.rpm;
@@ -97,18 +97,30 @@ void updateRpmDisplay() {
   }
 
   float dt = (now - rpmSmoothLastMs) / 1000.0f;
-  if (dt <= 0.0f || dt > 0.5f) {
-    rpmSmoothLastMs = now;
-    return;
-  }
+  if (dt <= 0.0f) return;
+  // Cap one step so a long ELM block doesn't teleport the needle in one frame,
+  // but still advance using real elapsed time across yield callbacks.
+  if (dt > 0.05f) dt = 0.05f;
   rpmSmoothLastMs = now;
 
   const float delta = rpmTarget - rpmDisplay;
-  const float alpha = RPM_SMOOTH_GAIN * dt;
-  if (alpha >= 1.0f || fabsf(delta) < 0.5f) {
+  const float maxStep = RPM_SMOOTH_SLEW * dt;
+  if (fabsf(delta) <= maxStep || fabsf(delta) < 0.5f) {
     rpmDisplay = rpmTarget;
   } else {
-    rpmDisplay += delta * alpha;
+    rpmDisplay += (delta > 0.0f) ? maxStep : -maxStep;
+  }
+}
+
+void tickRpmDisplay() {
+  if (displayOff || page != PAGE_RPM) return;
+  if (uiState != UI_LIVE && uiState != UI_MOCK) return;
+
+  updateRpmDisplay();
+  const int cur = isnan(rpmDisplay) ? -1 : (int)(rpmDisplay + 0.5f);
+  if (cur != lastRpmShown) {
+    lastRpmShown = cur;
+    drawBigValue(rpmDisplay, 0);
   }
 }
 
@@ -188,8 +200,20 @@ void invalidateUi(bool fullLayout) {
 }
 
 void nextPage() {
-  if (displayOff) return;
+  // Leaving blank screen: one press wakes and lands on Overview (wrap).
+  if (displayOff || page == PAGE_SCREEN_OFF) {
+    pendingNextPage = false;
+    pendingLongPress = false;
+    applyUiState(PAGE_OVERVIEW, false);
+    Serial.printf("[UI] page=%u (wake from screen-off)\n", page);
+    return;
+  }
+
   const uint8_t next = (page + 1) % PAGE_COUNT;
+  // Entering blank page: drop any queued extra flip so Overview isn't skipped.
+  if (next == PAGE_SCREEN_OFF) {
+    pendingNextPage = false;
+  }
   applyUiState(next, next == PAGE_SCREEN_OFF);
   Serial.printf("[UI] page=%u\n", page);
 }
@@ -376,6 +400,14 @@ void handleLongPressActions() {
   if (uiState == UI_LIVE || uiState == UI_MOCK) {
     if (page == PAGE_TRIP) {
       resetTripWithFeedback();
+    } else if (page == PAGE_TANK) {
+      trip.fillTank();
+      invalidateUi(true);
+      char msg[28];
+      snprintf(msg, sizeof(msg), "%.0f L set in profile", TANK_CAPACITY_L);
+      showStatus("Tank FULL", msg);
+      delay(700);
+      invalidateUi(true);
     } else if (page == PAGE_OVERVIEW) {
       enterOtaMode();
     } else if (page == PAGE_SCREEN_OFF) {
@@ -395,10 +427,14 @@ void elmUiYield() {
     pendingLongPress = true;
   }
   if (re && !btnLongHandled && (millis() - btnPressStartMs) < BTN_LONG_MS) {
-    if (uiState == UI_LIVE || uiState == UI_MOCK) {
+    // Don't queue page flips while blank — handled on wake instead.
+    if (!displayOff && page != PAGE_SCREEN_OFF &&
+        (uiState == UI_LIVE || uiState == UI_MOCK)) {
       pendingNextPage = true;
     }
   }
+  // Keep RPM animating during long ISO 9141 / BLE waits (mock doesn't block).
+  tickRpmDisplay();
 }
 
 void enterMockMode() {
@@ -692,39 +728,50 @@ void drawTankValues() {
   if (!stageCanvas) return;
   char pctBuf[16];
   char litBuf[28];
-  const float pct = telemetry.fuelLevelPct;
-  const bool supported = elm.fuelLevelAvailable();
+  char srcBuf[28];
+  const float ecuPct = telemetry.fuelLevelPct;
+  const bool ecuOk = elm.fuelLevelAvailable() && !isnan(ecuPct);
 
-  if (!supported) {
-    snprintf(pctBuf, sizeof(pctBuf), "N/A");
-    snprintf(litBuf, sizeof(litBuf), "ECU has no fuel %% PID");
-  } else if (isnan(pct)) {
+  float showPct;
+  float showL;
+  if (ecuOk) {
+    showPct = ecuPct;
+    showL = TANK_CAPACITY_L * (ecuPct / 100.0f);
+    snprintf(srcBuf, sizeof(srcBuf), "ECU 012F");
+  } else {
+    // Torque-style: remaining from vehicle profile − integrated fuel use
+    showL = trip.fuelRemainingL();
+    showPct = trip.fuelRemainingPct();
+    snprintf(srcBuf, sizeof(srcBuf), "profile calc");
+  }
+
+  if (isnan(showPct)) {
     snprintf(pctBuf, sizeof(pctBuf), "--");
+  } else {
+    snprintf(pctBuf, sizeof(pctBuf), "%.0f", showPct);
+  }
+  if (isnan(showL)) {
     snprintf(litBuf, sizeof(litBuf), "--.- L / %.0f L", TANK_CAPACITY_L);
   } else {
-    snprintf(pctBuf, sizeof(pctBuf), "%.0f", pct);
-    const float liters = TANK_CAPACITY_L * (pct / 100.0f);
-    snprintf(litBuf, sizeof(litBuf), "%.1f L / %.0f L", liters, TANK_CAPACITY_L);
+    snprintf(litBuf, sizeof(litBuf), "%.1f L / %.0f L", showL, TANK_CAPACITY_L);
   }
 
   stageCanvas->fillScreen(RGB565_BLACK);
 
-  const uint8_t size = fitTextSize(pctBuf, SCREEN_WIDTH - 80, 9, 5);
+  const uint8_t size = fitTextSize(pctBuf, SCREEN_WIDTH - 80, 8, 4);
   const int tw = textWidthPx(pctBuf, size);
   const int th = 8 * size;
   const int x = (VALUE_STAGE_W - tw) / 2 - 10;
-  const int y = (90 - th) / 2 + 6;
+  const int y = (78 - th) / 2;
   stageCanvas->setTextSize(size);
   stageCanvas->setTextColor(RGB565_WHITE);
   stageCanvas->setCursor(x, y);
   stageCanvas->print(pctBuf);
 
-  if (supported) {
-    stageCanvas->setTextSize(3);
-    stageCanvas->setTextColor(RGB565_GREENYELLOW);
-    stageCanvas->setCursor(x + tw + 6, y + th - 28);
-    stageCanvas->print('%');
-  }
+  stageCanvas->setTextSize(3);
+  stageCanvas->setTextColor(RGB565_GREENYELLOW);
+  stageCanvas->setCursor(x + tw + 6, y + th - 28);
+  stageCanvas->print('%');
 
   strncpy(lastTankLines[0], pctBuf, sizeof(lastTankLines[0]) - 1);
   lastTankLines[0][sizeof(lastTankLines[0]) - 1] = 0;
@@ -733,8 +780,14 @@ void drawTankValues() {
 
   stageCanvas->setTextSize(2);
   stageCanvas->setTextColor(RGB565_LIGHTGREY);
-  stageCanvas->setCursor(4, 100);
+  stageCanvas->setCursor(4, 88);
   stageCanvas->print(litBuf);
+  stageCanvas->setTextSize(1);
+  stageCanvas->setTextColor(RGB565_DARKGREY);
+  stageCanvas->setCursor(4, 114);
+  stageCanvas->print(srcBuf);
+  stageCanvas->setCursor(160, 114);
+  stageCanvas->print(F("hold=fill"));
   stageCanvas->flush();
 }
 
@@ -903,14 +956,15 @@ void loop() {
     return;
   }
 
-  // Display sleep: long-press wakes; ignore other UI
+  // Display sleep: long-press wakes in place; short press → Overview
   if (displayOff) {
     if (longPress) {
       rapidTaps = 0;
+      pendingNextPage = false;
       setDisplayPower(true);
     } else if (releasedEdge && !btnLongHandled &&
                (millis() - btnPressStartMs) < BTN_LONG_MS) {
-      applyUiState(PAGE_OVERVIEW, false);
+      nextPage();
     }
     // Keep trip/OBD alive quietly while screen is off
     if (uiState == UI_MOCK) {
@@ -1014,19 +1068,11 @@ void loop() {
     }
   }
 
-  if (liveLike && page == PAGE_RPM && !displayOff) {
-    updateRpmDisplay();
-  }
-
   if (liveLike && (layoutDirty || valuesDirty)) {
+    if (page == PAGE_RPM) updateRpmDisplay();
     renderLive();
-  } else if (liveLike && page == PAGE_RPM && !displayOff) {
-    const int prev = lastRpmShown;
-    const int cur = isnan(rpmDisplay) ? -1 : (int)(rpmDisplay + 0.5f);
-    if (cur != prev) {
-      lastRpmShown = cur;
-      drawBigValue(rpmDisplay, 0);
-    }
+  } else {
+    tickRpmDisplay();
   }
 
   delay(10);

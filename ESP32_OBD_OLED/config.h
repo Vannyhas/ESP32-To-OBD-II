@@ -62,16 +62,29 @@ enum BleUuidPreset {
 #define PAGE_SCREEN_OFF    7
 #define UI_REFRESH_MS      250  // redraw live page at most this often
 // RPM display smoothing (visual only; OBD poll rate unchanged).
-#define RPM_SMOOTH_GAIN    12.0f   // lerp toward new reading (~250 ms settle)
+// Real ELM/ISO9141 often returns the same RPM for many polls, then jumps —
+// animate toward the latest sample at a fixed visual slew rate.
+#define RPM_SMOOTH_SLEW    4000.0f // RPM units per second toward OBD target
+
+// ========================= VEHICLE PROFILE =========================
+// Toyota Harrier XU10 1998–1999 3.0 VVT-i (1MZ-FE), like Torque vehicle profile.
+// Facelift 2000+ 3.0 sometimes has 75 L tank — keep 65 L for 1999.
+#define VEHICLE_NAME            "Harrier 1999 3.0"
+#define VEHICLE_ENGINE          "1MZ-FE"
+#define VEHICLE_DISPLACEMENT_L  3.0f     // 2994 cc
+#define VEHICLE_CYLINDERS       6
+#define VEHICLE_FUEL_GASOLINE   1        // premium gasoline
+#define VEHICLE_AFR             14.7f    // stoich gasoline
+#define VEHICLE_FUEL_DENSITY    740.0f   // g/L gasoline
+#define VEHICLE_VE_PCT          85.0f    // NA V6; Torque-style VE ~75–85
+#define VEHICLE_FUEL_TRIM       1.0f     // Torque MPG trim (1.0 = none)
+#define TANK_CAPACITY_L         65.0f    // early XU10 3.0; FOUR Aero Tourer = 65 L
 
 // ========================= TRIP / FUEL =========================
 #define TRIP_MIN_KM        0.2f    // min distance before avg L/100 is shown
 #define TRIP_SAVE_MS       15000   // autosave interval to NVS
 // Don't integrate fuel unless engine is actually spinning (key-ON / MAF noise).
 #define TRIP_MIN_RPM       400.0f
-// Tank capacity for liters estimate from PID 012F (%).
-// Toyota Harrier XU10 / RX ~65 L — поправь при необходимости.
-#define TANK_CAPACITY_L    65.0f
 
 // ========================= MOCK UI =========================
 // Tap BOOT 5 times quickly to enter/exit mock telemetry (no OBD needed).
@@ -81,7 +94,7 @@ enum BleUuidPreset {
 
 // ========================= WIFI OTA (GitHub pull) =========================
 // Long-press Overview → connect to phone hotspot → check GitHub for newer bin.
-#define FIRMWARE_VERSION   "1.2.13"
+#define FIRMWARE_VERSION   "1.2.14"
 #define OTA_WIFI_SSID      "13T"
 #define OTA_WIFI_PASS      "12121212"
 #define OTA_WIFI_TIMEOUT_MS 45000
