@@ -50,6 +50,59 @@ char lastBigValue[24];
 char lastFuelLines[4][28];
 char lastTankLines[3][28];
 
+float rpmDisplay = NAN;
+float rpmTarget = NAN;
+unsigned long rpmSmoothLastMs = 0;
+int lastRpmShown = -1;
+
+void resetRpmDisplay() {
+  rpmDisplay = telemetry.rpm;
+  rpmTarget = telemetry.rpm;
+  rpmSmoothLastMs = 0;
+  lastRpmShown = -1;
+}
+
+// Visual interpolation between OBD RPM samples.
+void updateRpmDisplay() {
+  if (page != PAGE_RPM) {
+    rpmDisplay = telemetry.rpm;
+    rpmTarget = telemetry.rpm;
+    rpmSmoothLastMs = 0;
+    return;
+  }
+
+  const unsigned long now = millis();
+  if (isnan(telemetry.rpm)) {
+    rpmDisplay = NAN;
+    rpmTarget = NAN;
+    rpmSmoothLastMs = now;
+    return;
+  }
+
+  rpmTarget = telemetry.rpm;
+
+  if (rpmSmoothLastMs == 0 || isnan(rpmDisplay)) {
+    rpmDisplay = rpmTarget;
+    rpmSmoothLastMs = now;
+    return;
+  }
+
+  float dt = (now - rpmSmoothLastMs) / 1000.0f;
+  if (dt <= 0.0f || dt > 0.5f) {
+    rpmSmoothLastMs = now;
+    return;
+  }
+  rpmSmoothLastMs = now;
+
+  const float delta = rpmTarget - rpmDisplay;
+  const float alpha = RPM_SMOOTH_GAIN * dt;
+  if (alpha >= 1.0f || fabsf(delta) < 0.5f) {
+    rpmDisplay = rpmTarget;
+  } else {
+    rpmDisplay += delta * alpha;
+  }
+}
+
 void showStatus(const char* title, const char* line2 = nullptr);
 void updateMockTelemetry();
 void enterMockMode();
@@ -114,6 +167,9 @@ void invalidateUi(bool fullLayout) {
     memset(lastFuelLines, 0, sizeof(lastFuelLines));
     memset(lastTankLines, 0, sizeof(lastTankLines));
     lastBigValue[0] = 0;
+  }
+  if (fullLayout) {
+    resetRpmDisplay();
   }
   valuesDirty = true;
 }
@@ -308,6 +364,7 @@ void enterMockMode() {
   uiState = UI_MOCK;
   goToBatScreen();
   updateMockTelemetry();
+  resetRpmDisplay();
   setDisplayPower(true);
   showStatus("MOCK MODE", "hold RPM = exit");
   delay(400);
@@ -324,6 +381,7 @@ void exitMockMode() {
   trip.save();
   // Drop fake sensors so live OBD doesn't briefly inherit mock MAF/RPM.
   telemetry = ObdData{};
+  resetRpmDisplay();
   bleObd.begin("ESP32-OBD-LCD");
 }
 
@@ -644,7 +702,7 @@ void renderLive() {
   switch (page) {
     case PAGE_OVERVIEW: drawOverviewValues(); break;
     case PAGE_BAT: drawBigValue(telemetry.voltage, 1); break;
-    case PAGE_RPM: drawBigValue(telemetry.rpm, 0); break;
+    case PAGE_RPM: drawBigValue(rpmDisplay, 0); break;
     case PAGE_COOLANT: drawBigValue(telemetry.coolantC, 0); break;
     case PAGE_AMBIENT: drawBigValue(telemetry.intakeC, 0); break;
     case PAGE_TANK: drawTankValues(); break;
@@ -680,6 +738,7 @@ bool connectAndInit() {
   uiState = UI_LIVE;
   lastPidMs = 0;
   telemetry = ObdData{};  // start clean; no stale mock/live mix
+  resetRpmDisplay();
   setDisplayPower(true);
   goToBatScreen();
   showStatus("Connected!", "hold BAT=sleep");
@@ -883,8 +942,19 @@ void loop() {
     }
   }
 
+  if (liveLike && page == PAGE_RPM && !displayOff) {
+    updateRpmDisplay();
+  }
+
   if (liveLike && (layoutDirty || valuesDirty)) {
     renderLive();
+  } else if (liveLike && page == PAGE_RPM && !displayOff) {
+    const int prev = lastRpmShown;
+    const int cur = isnan(rpmDisplay) ? -1 : (int)(rpmDisplay + 0.5f);
+    if (cur != prev) {
+      lastRpmShown = cur;
+      drawBigValue(rpmDisplay, 0);
+    }
   }
 
   delay(10);

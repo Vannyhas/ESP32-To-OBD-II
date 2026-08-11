@@ -60,6 +60,8 @@ enum BleUuidPreset {
 #define PAGE_TANK          5
 #define PAGE_TRIP          6
 #define UI_REFRESH_MS      250  // redraw live page at most this often
+// RPM display smoothing (visual only; OBD poll rate unchanged).
+#define RPM_SMOOTH_GAIN    12.0f   // lerp toward new reading (~250 ms settle)
 
 // ========================= TRIP / FUEL =========================
 #define TRIP_MIN_KM        0.2f    // min distance before avg L/100 is shown
@@ -78,7 +80,7 @@ enum BleUuidPreset {
 
 // ========================= WIFI OTA (GitHub pull) =========================
 // Long-press Overview → connect to phone hotspot → check GitHub for newer bin.
-#define FIRMWARE_VERSION   "1.2.8"
+#define FIRMWARE_VERSION   "1.2.9"
 #define OTA_WIFI_SSID      "13T"
 #define OTA_WIFI_PASS      "12121212"
 #define OTA_WIFI_TIMEOUT_MS 45000
