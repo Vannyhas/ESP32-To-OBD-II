@@ -21,7 +21,7 @@ constexpr int VALUE_STAGE_X = 10;
 constexpr int VALUE_STAGE_Y = 32;
 constexpr int VALUE_STAGE_W = SCREEN_WIDTH - 14;
 constexpr int VALUE_STAGE_H = SCREEN_HEIGHT - 48;
-Arduino_Canvas *valueCanvas = new Arduino_Canvas(
+Arduino_Canvas *stageCanvas = new Arduino_Canvas(
     VALUE_STAGE_W, VALUE_STAGE_H, gfx, VALUE_STAGE_X, VALUE_STAGE_Y);
 
 Elm327 elm;
@@ -497,15 +497,6 @@ static void fmtOrDash(char* out, size_t n, const char* prefix, float v, int deci
   }
 }
 
-static void paintTextInRect(int x, int y, int w, int h, const char* text,
-                            uint8_t textSize, uint16_t color) {
-  gfx->fillRect(x, y, w, h, RGB565_BLACK);
-  gfx->setTextSize(textSize);
-  gfx->setTextColor(color);
-  gfx->setCursor(x, y);
-  gfx->print(text);
-}
-
 static char valueUnit[16];
 static uint16_t valueAccent = RGB565_WHITE;
 
@@ -534,6 +525,7 @@ void drawOverviewChrome() {
 }
 
 void drawOverviewValues() {
+  if (!stageCanvas) return;
   char lines[4][24];
   fmtOrDash(lines[0], sizeof(lines[0]), "", telemetry.voltage, 1, " V");
   fmtOrDash(lines[1], sizeof(lines[1]), "", telemetry.coolantC, 0, " C");
@@ -548,16 +540,20 @@ void drawOverviewValues() {
 
   const char* labels[4] = {"BAT", "TEMP", "LOAD", "AVG"};
   const char* suffixes[4] = {"", "", "", " L/100"};
-  const int ys[4] = {34, 66, 98, 130};
+  const int ys[4] = {2, 34, 66, 98};
 
+  stageCanvas->fillScreen(RGB565_BLACK);
+  stageCanvas->setTextSize(2);
+  stageCanvas->setTextColor(RGB565_WHITE);
   for (int i = 0; i < 4; i++) {
     char row[28];
     snprintf(row, sizeof(row), "%s  %s%s", labels[i], lines[i], suffixes[i]);
-    if (strcmp(row, lastOverview[i]) == 0) continue;
     strncpy(lastOverview[i], row, sizeof(lastOverview[i]) - 1);
     lastOverview[i][sizeof(lastOverview[i]) - 1] = 0;
-    paintTextInRect(14, ys[i], SCREEN_WIDTH - 22, 28, row, 2, RGB565_WHITE);
+    stageCanvas->setCursor(4, ys[i]);
+    stageCanvas->print(row);
   }
+  stageCanvas->flush();
 }
 
 void drawValueChrome(const char* label, const char* unit, uint16_t accent) {
@@ -588,7 +584,7 @@ void drawBigValue(float value, int decimals) {
   strncpy(lastBigValue, buf, sizeof(lastBigValue) - 1);
   lastBigValue[sizeof(lastBigValue) - 1] = 0;
 
-  if (!valueCanvas) return;
+  if (!stageCanvas) return;
 
   const uint8_t size = fitTextSize(buf, SCREEN_WIDTH - 70, 9, 5);
   const int tw = textWidthPx(buf, size);
@@ -604,18 +600,18 @@ void drawBigValue(float value, int decimals) {
     uy = y + th + 4;
   }
 
-  valueCanvas->fillScreen(RGB565_BLACK);
-  valueCanvas->setTextSize(size);
-  valueCanvas->setTextColor(RGB565_WHITE);
-  valueCanvas->setCursor(x, y);
-  valueCanvas->print(buf);
+  stageCanvas->fillScreen(RGB565_BLACK);
+  stageCanvas->setTextSize(size);
+  stageCanvas->setTextColor(RGB565_WHITE);
+  stageCanvas->setCursor(x, y);
+  stageCanvas->print(buf);
 
   // Unit to the right of the number
-  valueCanvas->setTextSize(2);
-  valueCanvas->setTextColor(valueAccent);
-  valueCanvas->setCursor(ux, uy);
-  valueCanvas->print(valueUnit);
-  valueCanvas->flush();
+  stageCanvas->setTextSize(2);
+  stageCanvas->setTextColor(valueAccent);
+  stageCanvas->setCursor(ux, uy);
+  stageCanvas->print(valueUnit);
+  stageCanvas->flush();
 }
 
 void drawFuelChrome() {
@@ -630,6 +626,7 @@ void drawFuelChrome() {
 }
 
 void drawFuelValues() {
+  if (!stageCanvas) return;
   char avgBuf[16];
   const float avg = trip.avgLPer100();
   if (isnan(avg)) {
@@ -643,40 +640,41 @@ void drawFuelValues() {
   snprintf(lines[1], sizeof(lines[1]), "%.2f km", trip.distanceKm());
   snprintf(lines[2], sizeof(lines[2]), "%.3f L", trip.fuelLiters());
 
-  // Hero AVG
-  if (strcmp(lines[0], lastFuelLines[0]) != 0) {
-    strncpy(lastFuelLines[0], lines[0], sizeof(lastFuelLines[0]) - 1);
-    lastFuelLines[0][sizeof(lastFuelLines[0]) - 1] = 0;
-    gfx->fillRect(10, 30, SCREEN_WIDTH - 14, 78, RGB565_BLACK);
+  stageCanvas->fillScreen(RGB565_BLACK);
+  stageCanvas->setTextSize(1);
+  stageCanvas->setTextColor(RGB565_YELLOW);
+  stageCanvas->setCursor(4, 2);
+  stageCanvas->print(F("AVG"));
 
-    gfx->setTextSize(1);
-    gfx->setTextColor(RGB565_YELLOW);
-    gfx->setCursor(14, 32);
-    gfx->print(F("AVG"));
+  const uint8_t size = fitTextSize(lines[0], SCREEN_WIDTH - 110, 7, 4);
+  const int tw = textWidthPx(lines[0], size);
+  const int th = 8 * size;
+  const int x = 10;
+  const int y = 18;
+  stageCanvas->setTextSize(size);
+  stageCanvas->setTextColor(RGB565_WHITE);
+  stageCanvas->setCursor(x, y);
+  stageCanvas->print(lines[0]);
 
-    const uint8_t size = fitTextSize(lines[0], SCREEN_WIDTH - 110, 7, 4);
-    const int tw = textWidthPx(lines[0], size);
-    const int th = 8 * size;
-    const int x = 20;
-    const int y = 48;
-    gfx->setTextSize(size);
-    gfx->setTextColor(RGB565_WHITE);
-    gfx->setCursor(x, y);
-    gfx->print(lines[0]);
+  stageCanvas->setTextSize(2);
+  stageCanvas->setTextColor(RGB565_YELLOW);
+  stageCanvas->setCursor(x + tw + 8, y + th - 18);
+  stageCanvas->print(F("L/100km"));
 
-    gfx->setTextSize(2);
-    gfx->setTextColor(RGB565_YELLOW);
-    gfx->setCursor(x + tw + 8, y + th - 18);
-    gfx->print(F("L/100km"));
-  }
+  strncpy(lastFuelLines[0], lines[0], sizeof(lastFuelLines[0]) - 1);
+  lastFuelLines[0][sizeof(lastFuelLines[0]) - 1] = 0;
+  strncpy(lastFuelLines[1], lines[1], sizeof(lastFuelLines[1]) - 1);
+  lastFuelLines[1][sizeof(lastFuelLines[1]) - 1] = 0;
+  strncpy(lastFuelLines[2], lines[2], sizeof(lastFuelLines[2]) - 1);
+  lastFuelLines[2][sizeof(lastFuelLines[2]) - 1] = 0;
 
-  for (int i = 1; i < 3; i++) {
-    if (strcmp(lines[i], lastFuelLines[i]) == 0) continue;
-    strncpy(lastFuelLines[i], lines[i], sizeof(lastFuelLines[i]) - 1);
-    lastFuelLines[i][sizeof(lastFuelLines[i]) - 1] = 0;
-    const int y = (i == 1) ? 118 : 142;
-    paintTextInRect(14, y, SCREEN_WIDTH - 22, 22, lines[i], 2, RGB565_LIGHTGREY);
-  }
+  stageCanvas->setTextSize(2);
+  stageCanvas->setTextColor(RGB565_LIGHTGREY);
+  stageCanvas->setCursor(4, 88);
+  stageCanvas->print(lines[1]);
+  stageCanvas->setCursor(4, 112);
+  stageCanvas->print(lines[2]);
+  stageCanvas->flush();
 }
 
 void drawTankChrome() {
@@ -691,6 +689,7 @@ void drawTankChrome() {
 }
 
 void drawTankValues() {
+  if (!stageCanvas) return;
   char pctBuf[16];
   char litBuf[28];
   const float pct = telemetry.fuelLevelPct;
@@ -708,34 +707,35 @@ void drawTankValues() {
     snprintf(litBuf, sizeof(litBuf), "%.1f L / %.0f L", liters, TANK_CAPACITY_L);
   }
 
-  if (strcmp(pctBuf, lastTankLines[0]) != 0) {
-    strncpy(lastTankLines[0], pctBuf, sizeof(lastTankLines[0]) - 1);
-    lastTankLines[0][sizeof(lastTankLines[0]) - 1] = 0;
-    gfx->fillRect(10, 30, SCREEN_WIDTH - 14, 90, RGB565_BLACK);
+  stageCanvas->fillScreen(RGB565_BLACK);
 
-    const uint8_t size = fitTextSize(pctBuf, SCREEN_WIDTH - 80, 9, 5);
-    const int tw = textWidthPx(pctBuf, size);
-    const int th = 8 * size;
-    const int x = (SCREEN_WIDTH - tw) / 2 - 10;
-    const int y = 36 + (90 - th) / 2;
-    gfx->setTextSize(size);
-    gfx->setTextColor(RGB565_WHITE);
-    gfx->setCursor(x, y);
-    gfx->print(pctBuf);
+  const uint8_t size = fitTextSize(pctBuf, SCREEN_WIDTH - 80, 9, 5);
+  const int tw = textWidthPx(pctBuf, size);
+  const int th = 8 * size;
+  const int x = (VALUE_STAGE_W - tw) / 2 - 10;
+  const int y = (90 - th) / 2 + 6;
+  stageCanvas->setTextSize(size);
+  stageCanvas->setTextColor(RGB565_WHITE);
+  stageCanvas->setCursor(x, y);
+  stageCanvas->print(pctBuf);
 
-    if (supported) {
-      gfx->setTextSize(3);
-      gfx->setTextColor(RGB565_GREENYELLOW);
-      gfx->setCursor(x + tw + 6, y + th - 28);
-      gfx->print('%');
-    }
+  if (supported) {
+    stageCanvas->setTextSize(3);
+    stageCanvas->setTextColor(RGB565_GREENYELLOW);
+    stageCanvas->setCursor(x + tw + 6, y + th - 28);
+    stageCanvas->print('%');
   }
 
-  if (strcmp(litBuf, lastTankLines[1]) != 0) {
-    strncpy(lastTankLines[1], litBuf, sizeof(lastTankLines[1]) - 1);
-    lastTankLines[1][sizeof(lastTankLines[1]) - 1] = 0;
-    paintTextInRect(14, 130, SCREEN_WIDTH - 22, 24, litBuf, 2, RGB565_LIGHTGREY);
-  }
+  strncpy(lastTankLines[0], pctBuf, sizeof(lastTankLines[0]) - 1);
+  lastTankLines[0][sizeof(lastTankLines[0]) - 1] = 0;
+  strncpy(lastTankLines[1], litBuf, sizeof(lastTankLines[1]) - 1);
+  lastTankLines[1][sizeof(lastTankLines[1]) - 1] = 0;
+
+  stageCanvas->setTextSize(2);
+  stageCanvas->setTextColor(RGB565_LIGHTGREY);
+  stageCanvas->setCursor(4, 100);
+  stageCanvas->print(litBuf);
+  stageCanvas->flush();
 }
 
 void renderLive() {
@@ -865,7 +865,7 @@ void setup() {
   if (!gfx->begin()) {
     Serial.println("LCD init failed");
   }
-  if (!valueCanvas->begin(GFX_SKIP_OUTPUT_BEGIN)) {
+  if (!stageCanvas->begin(GFX_SKIP_OUTPUT_BEGIN)) {
     Serial.println("Value canvas alloc failed");
   }
   gfx->fillScreen(RGB565_BLACK);
